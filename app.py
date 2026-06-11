@@ -14,10 +14,8 @@ st.title("Gestion de la Donation Lachaux")
 @st.cache_data(ttl=30)
 def load_data():
     # 1. Chargement des données depuis votre Sheet publié
-    # REMPLACEZ L'URL CI-DESSOUS PAR VOTRE LIEN DE PUBLICATION CSV
     url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRrcHwy2y4vE2boubFxFCH-3RZpIyr0DvEm0ScJBHsr6UG4EMTvAJz7oqdlRVuIpouLhoxG7l5kCjRF/pub?output=csv"
     response = requests.get(url)
-    # On force l'encodage en utf-8 pour éviter les erreurs de caractères
     response.encoding = 'utf-8'
     df = pd.read_csv(StringIO(response.text))
     df['id_merge'] = df['id_merge'].astype(str)
@@ -36,7 +34,6 @@ gdf = load_data()
 
 # --- CARTE ---
 st.subheader("Visualisation des parcelles")
-# Calcul du centre moyen pour centrer la carte
 m = folium.Map(location=[gdf.geometry.centroid.y.mean(), gdf.geometry.centroid.x.mean()], zoom_start=15)
 
 def get_color(statut):
@@ -68,11 +65,19 @@ gdf['Propriétaire'] = gdf['IS'].map(libelles)
 for col in ['contenance', 'Revenu_Cadastral']:
     gdf[col] = pd.to_numeric(gdf[col].astype(str).str.replace(',', '.'), errors='coerce').fillna(0)
 
-# Groupby avec compte des parcelles et sommes
-summary = gdf.groupby(['Propriétaire', 'Nature']).agg({
+# Groupby avec marges (totaux)
+summary = gdf.groupby(['Propriétaire', 'Nature'], as_index=False).agg({
     'id_merge': 'count',
     'contenance': 'sum',
     'Revenu_Cadastral': 'sum'
-}).rename(columns={'id_merge': 'Nombre de parcelles'}).reset_index()
+})
+
+# Calcul des totaux par Propriétaire
+totals = summary.groupby('Propriétaire')[['id_merge', 'contenance', 'Revenu_Cadastral']].sum().reset_index()
+totals['Nature'] = 'TOTAL'
+
+# On combine le détail et les totaux
+summary = pd.concat([summary, totals]).sort_values(['Propriétaire', 'Nature'])
+summary = summary.rename(columns={'id_merge': 'Nombre de parcelles'})
 
 st.table(summary)
