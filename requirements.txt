@@ -4,3 +4,5 @@ geopandas
 folium
 streamlit-folium
 requests
+gspread
+google-auth
