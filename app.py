@@ -4,6 +4,8 @@ import geopandas as gpd
 import json
 import folium
 import streamlit.components.v1 as components
+import requests
+from io import StringIO
 
 # Configuration pour occuper toute la largeur
 st.set_page_config(layout="wide")
@@ -14,7 +16,10 @@ def load_data():
     # 1. Chargement des données depuis votre Sheet publié
     # REMPLACEZ L'URL CI-DESSOUS PAR VOTRE LIEN DE PUBLICATION CSV
     url = "VOTRE_URL_ICI"
-    df = pd.read_csv(url)
+    response = requests.get(url)
+    # On force l'encodage en utf-8 pour éviter les erreurs de caractères
+    response.encoding = 'utf-8'
+    df = pd.read_csv(StringIO(response.text))
     df['id_merge'] = df['id_merge'].astype(str)
     
     # 2. Chargement de la géographie
@@ -31,6 +36,7 @@ gdf = load_data()
 
 # --- CARTE ---
 st.subheader("Visualisation des parcelles")
+# Calcul du centre moyen pour centrer la carte
 m = folium.Map(location=[gdf.geometry.centroid.y.mean(), gdf.geometry.centroid.x.mean()], zoom_start=15)
 
 def get_color(statut):
@@ -60,7 +66,6 @@ gdf['Propriétaire'] = gdf['IS'].map(libelles)
 
 # Nettoyage des colonnes numériques
 for col in ['contenance', 'Revenu_Cadastral']:
-    # On remplace la virgule par un point et on force la conversion numérique
     gdf[col] = pd.to_numeric(gdf[col].astype(str).str.replace(',', '.'), errors='coerce').fillna(0)
 
 # Groupby avec compte des parcelles et sommes
