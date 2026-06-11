@@ -55,29 +55,38 @@ for _, row in gdf.iterrows():
 
 components.html(m._repr_html_(), width=800, height=500)
 
-# --- TABLEAU DE BORD ---
+# --- TABLEAU DE BORD (Trié correctement) ---
 st.subheader("Tableau de bord des attributions")
 gdf['IS'] = gdf['IS'].fillna('F')
 libelles = {'I': 'Isabelle', 'S': 'Sébastien', 'F': 'Reste à attribuer'}
 gdf['Propriétaire'] = gdf['IS'].map(libelles)
 
-# Nettoyage des colonnes numériques
+# Nettoyage
 for col in ['contenance', 'Revenu_Cadastral']:
     gdf[col] = pd.to_numeric(gdf[col].astype(str).str.replace(',', '.'), errors='coerce').fillna(0)
 
-# Groupby avec marges (totaux)
+# Calcul du détail
 summary = gdf.groupby(['Propriétaire', 'Nature'], as_index=False).agg({
     'id_merge': 'count',
     'contenance': 'sum',
     'Revenu_Cadastral': 'sum'
 })
 
-# Calcul des totaux par Propriétaire
+# Calcul des totaux
 totals = summary.groupby('Propriétaire')[['id_merge', 'contenance', 'Revenu_Cadastral']].sum().reset_index()
 totals['Nature'] = 'TOTAL'
 
-# On combine le détail et les totaux
-summary = pd.concat([summary, totals]).sort_values(['Propriétaire', 'Nature'])
-summary = summary.rename(columns={'id_merge': 'Nombre de parcelles'})
+# On combine
+summary = pd.concat([summary, totals])
+
+# ASTUCE DE TRI : 
+# On crée une colonne temporaire pour trier (Nature normale = 0, TOTAL = 1)
+summary['sort_order'] = summary['Nature'].apply(lambda x: 1 if x == 'TOTAL' else 0)
+
+# On trie d'abord par Propriétaire, puis par sort_order, puis par Nature
+summary = summary.sort_values(['Propriétaire', 'sort_order', 'Nature'])
+
+# On supprime la colonne de tri et on affiche
+summary = summary.drop(columns=['sort_order']).rename(columns={'id_merge': 'Nombre de parcelles'})
 
 st.table(summary)
