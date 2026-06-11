@@ -87,7 +87,7 @@ if st.button("Valider l'attribution"):
         st.error(f"Erreur : {e}")
 
 # --- TABLEAU DE BORD ---
-# --- TABLEAU DE BORD (Correctif KeyError) ---
+# --- TABLEAU DE BORD (Version ultra-stable) ---
 st.subheader("Tableau de bord des attributions - Donation Isa / Seb")
 df_display = gdf.copy()
 df_display['IS'] = df_display['IS'].fillna('F')
@@ -104,19 +104,8 @@ summary = pd.concat([summary, totals])
 summary['sort_order'] = summary['Nature'].apply(lambda x: 1 if x == 'TOTAL' else 0)
 summary = summary.sort_values(['Propriétaire', 'sort_order', 'Nature']).drop(columns=['sort_order'])
 
-# Renommage ici AVANT d'appliquer le style pour être sûr que les noms de colonnes sont corrects
+# On renomme pour l'affichage
 summary = summary.rename(columns={'id_merge': 'Nombre de parcelles'})
 
-# Fonction sécurisée pour colorer
-def highlight_total(row):
-    # On vérifie la valeur de la colonne Nature
-    if row['Nature'] == 'TOTAL':
-        return ['background-color: #e6e6fa'] * len(row)
-    return [''] * len(row)
-
-# Application du style
-st.dataframe(
-    summary.style.apply(highlight_total, axis=1),
-    hide_index=True,
-    use_container_width=True
-)
+# Affichage simple (sans style complexe pour éviter les erreurs)
+st.table(summary)
