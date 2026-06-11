@@ -15,7 +15,7 @@ st.title("Gestion de la Donation Lachaux")
 def load_data():
     # 1. Chargement des données depuis votre Sheet publié
     # REMPLACEZ L'URL CI-DESSOUS PAR VOTRE LIEN DE PUBLICATION CSV
-    url = "VOTRE_URL_ICI"
+    url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRrcHwy2y4vE2boubFxFCH-3RZpIyr0DvEm0ScJBHsr6UG4EMTvAJz7oqdlRVuIpouLhoxG7l5kCjRF/pub?output=csv"
     response = requests.get(url)
     # On force l'encodage en utf-8 pour éviter les erreurs de caractères
     response.encoding = 'utf-8'
