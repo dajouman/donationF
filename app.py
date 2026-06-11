@@ -12,21 +12,26 @@ st.set_page_config(layout="wide")
 st.title("Gestion de la Donation Lachaux")
 
 @st.cache_data(ttl=30)
+@st.cache_data(ttl=30)
 def load_data():
-    # 1. Chargement des données depuis votre Sheet publié
-    url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRrcHwy2y4vE2boubFxFCH-3RZpIyr0DvEm0ScJBHsr6UG4EMTvAJz7oqdlRVuIpouLhoxG7l5kCjRF/pub?output=csv"
+    url = "VOTRE_URL_ICI"
     response = requests.get(url)
     response.encoding = 'utf-8'
-    df = pd.read_csv(StringIO(response.text))
+    
+    # On force la lecture sans "manger" de lignes, 
+    # et on ignore les erreurs de formatage pour voir ce qui bloque
+    df = pd.read_csv(StringIO(response.text), on_bad_lines='warn', skipinitialspace=True)
+    
+    # DEBUG : Affiche le nombre de lignes réelles
+    st.sidebar.write(f"Lignes détectées dans le CSV : {len(df)}")
+    
     df['id_merge'] = df['id_merge'].astype(str)
     
-    # 2. Chargement de la géographie
     with open('commune.json', 'r', encoding='utf-8') as f:
         data = json.load(f)
     gdf = gpd.GeoDataFrame.from_features(data['features'])
     gdf['id'] = gdf['id'].astype(str)
     
-    # 3. Fusion des deux
     return gdf.merge(df, left_on='id', right_on='id_merge', how='left')
 
 # On charge les données
