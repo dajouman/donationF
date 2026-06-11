@@ -33,7 +33,7 @@ def update_google_sheet(parcelle_id, nouveau_statut):
     creds_dict = st.secrets["gcp_service_account"]
     creds = Credentials.from_service_account_info(creds_dict)
     client = gspread.authorize(creds)
-    sheet = client.open("Donation_Lachaux").sheet1 # Assurez-vous que c'est le nom exact
+    sheet = client.open("Donation_Lachaux").sheet1
     cell = sheet.find(str(parcelle_id))
     sheet.update_cell(cell.row, 4, nouveau_statut)
 
@@ -48,16 +48,16 @@ for _, row in gdf.iterrows():
     statut = row.get('IS')
     
     if pd.isna(statut):
-        couleur = '#f0f0f0' # Gris très clair
+        couleur = '#f0f0f0' 
         nom_proprio = "Hors inventaire"
     elif statut == 'F':
-        couleur = '#f1c40f' # Jaune
+        couleur = '#f1c40f' 
         nom_proprio = "Reste à attribuer"
     elif statut == 'I':
-        couleur = '#2ecc71' # Vert
+        couleur = '#2ecc71' 
         nom_proprio = "Isabelle"
-    else: # S
-        couleur = '#e74c3c' # Rouge
+    else: 
+        couleur = '#e74c3c' 
         nom_proprio = "Sébastien"
 
     info_bulle = f"Parcelle: {row['id']}<br>Propriétaire: {nom_proprio}"
@@ -72,7 +72,10 @@ components.html(m._repr_html_(), width=800, height=500)
 
 # --- INTERFACE D'ATTRIBUTION ---
 st.subheader("Attribution d'une parcelle")
-ids_tries = sorted(gdf['id'].unique().astype(str), key=lambda x: int(x) if x.isdigit() else x)
+# On ne garde que les parcelles présentes dans le CSV
+df_inventaire = gdf[gdf['id_merge'].notna()]
+ids_tries = sorted(df_inventaire['id'].unique().astype(str), key=lambda x: int(x) if x.isdigit() else x)
+
 selected_id = st.selectbox("Sélectionnez une parcelle :", ids_tries)
 new_is = st.radio("Attribuer à :", ['I', 'S', 'F'], format_func=lambda x: {'I': 'Isabelle', 'S': 'Sébastien', 'F': 'Reste à attribuer'}[x])
 
