@@ -87,6 +87,7 @@ if st.button("Valider l'attribution"):
         st.error(f"Erreur : {e}")
 
 # --- TABLEAU DE BORD ---
+# --- TABLEAU DE BORD (Correctif KeyError) ---
 st.subheader("Tableau de bord des attributions - Donation Isa / Seb")
 df_display = gdf.copy()
 df_display['IS'] = df_display['IS'].fillna('F')
@@ -95,6 +96,7 @@ df_display['Propriétaire'] = df_display['IS'].map({'I': 'Isabelle', 'S': 'Séba
 for col in ['contenance', 'Revenu_Cadastral']:
     df_display[col] = pd.to_numeric(df_display[col].astype(str).str.replace(',', '.'), errors='coerce').fillna(0)
 
+# Création du résumé
 summary = df_display.groupby(['Propriétaire', 'Nature'], as_index=False).agg({'id_merge': 'count', 'contenance': 'sum', 'Revenu_Cadastral': 'sum'})
 totals = summary.groupby('Propriétaire')[['id_merge', 'contenance', 'Revenu_Cadastral']].sum().reset_index()
 totals['Nature'] = 'TOTAL'
@@ -102,13 +104,19 @@ summary = pd.concat([summary, totals])
 summary['sort_order'] = summary['Nature'].apply(lambda x: 1 if x == 'TOTAL' else 0)
 summary = summary.sort_values(['Propriétaire', 'sort_order', 'Nature']).drop(columns=['sort_order'])
 
-def highlight_total(row):
-    color = 'background-color: #e6e6fa' if row['Nature'] == 'TOTAL' else ''
-    return [color] * len(row)
+# Renommage ici AVANT d'appliquer le style pour être sûr que les noms de colonnes sont corrects
+summary = summary.rename(columns={'id_merge': 'Nombre de parcelles'})
 
+# Fonction sécurisée pour colorer
+def highlight_total(row):
+    # On vérifie la valeur de la colonne Nature
+    if row['Nature'] == 'TOTAL':
+        return ['background-color: #e6e6fa'] * len(row)
+    return [''] * len(row)
+
+# Application du style
 st.dataframe(
-    summary.rename(columns={'id_merge': 'Nombre de parcelles'})
-    .style.apply(highlight_total, axis=1),
+    summary.style.apply(highlight_total, axis=1),
     hide_index=True,
     use_container_width=True
 )
