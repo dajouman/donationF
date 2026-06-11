@@ -16,7 +16,6 @@ st.title("Gestion de la Donation Lachaux")
 # --- FONCTIONS ---
 @st.cache_data(ttl=30)
 def load_data():
-    # REMPLACEZ VOTRE_URL_ICI PAR VOTRE LIEN CSV DE PUBLICATION GOOGLE SHEETS
     url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRrcHwy2y4vE2boubFxFCH-3RZpIyr0DvEm0ScJBHsr6UG4EMTvAJz7oqdlRVuIpouLhoxG7l5kCjRF/pub?output=csv"
     response = requests.get(url)
     response.encoding = 'utf-8'
@@ -31,17 +30,11 @@ def load_data():
     return gdf.merge(df, left_on='id', right_on='id_merge', how='left')
 
 def update_google_sheet(parcelle_id, nouveau_statut):
-    # Connexion à l'API Google Sheets via les secrets Streamlit
     creds_dict = st.secrets["gcp_service_account"]
     creds = Credentials.from_service_account_info(creds_dict)
     client = gspread.authorize(creds)
-    
-    # REMPLACEZ "NOM_DE_VOTRE_FICHIER_SHEET" PAR LE NOM EXACT DANS VOTRE DRIVE
     sheet = client.open("NOM_DE_VOTRE_FICHIER_SHEET").sheet1
-    
-    # Trouver la ligne de la parcelle par son ID
     cell = sheet.find(str(parcelle_id))
-    # Met à jour la colonne 4 (colonne D) - Ajustez ce chiffre si besoin
     sheet.update_cell(cell.row, 4, nouveau_statut)
 
 # --- CHARGEMENT ---
@@ -52,25 +45,36 @@ st.subheader("Visualisation des parcelles")
 m = folium.Map(location=[gdf.geometry.centroid.y.mean(), gdf.geometry.centroid.x.mean()], zoom_start=15)
 
 for _, row in gdf.iterrows():
-    statut = row.get('IS', 'F')
-    color = '#2ecc71' if statut == 'I' else '#3498db' if statut == 'S' else '#f1c40f'
-    folium.GeoJson(row['geometry'], style_function=lambda x, c=color: {'fillColor': c, 'color': 'black', 'weight': 0.5, 'fillOpacity': 0.7}).add_to(m)
+    statut = row.get('IS')
+    # Gris clair si pas de données ou statut F, sinon couleurs
+    if pd.isna(statut) or statut == 'F':
+        couleur = '#f0f0f0'
+    else:
+        couleur = '#2ecc71' if statut == 'I' else '#3498db'
+
+    info_bulle = f"Parcelle: {row['id']}<br>Propriétaire: {row.get('Propriétaire', 'Aucun')}"
+    
+    folium.GeoJson(
+        row['geometry'],
+        style_function=lambda x, c=couleur: {'fillColor': c, 'color': 'black', 'weight': 0.3, 'fillOpacity': 0.7},
+        tooltip=folium.Tooltip(info_bulle)
+    ).add_to(m)
 
 components.html(m._repr_html_(), width=800, height=500)
 
 # --- INTERFACE D'ATTRIBUTION ---
 st.subheader("Attribution d'une parcelle")
-col1, col2 = st.columns(2)
-with col1:
-    selected_id = st.selectbox("Sélectionnez une parcelle :", gdf['id'].unique())
-    new_is = st.radio("Attribuer à :", ['I', 'S', 'F'], format_func=lambda x: {'I': 'Isabelle', 'S': 'Sébastien', 'F': 'Reste à attribuer'}[x])
-    if st.button("Valider l'attribution"):
-        try:
-            update_google_sheet(selected_id, new_is)
-            st.success("Enregistré dans le Google Sheet !")
-            st.rerun() # Recharge l'application
-        except Exception as e:
-            st.error(f"Erreur de mise à jour : {e}")
+ids_tries = sorted(gdf['id'].unique().astype(str))
+selected_id = st.selectbox("Sélectionnez une parcelle :", ids_tries)
+new_is = st.radio("Attribuer à :", ['I', 'S', 'F'], format_func=lambda x: {'I': 'Isabelle', 'S': 'Sébastien', 'F': 'Reste à attribuer'}[x])
+
+if st.button("Valider l'attribution"):
+    try:
+        update_google_sheet(selected_id, new_is)
+        st.success("Enregistré dans le Google Sheet !")
+        st.rerun()
+    except Exception as e:
+        st.error(f"Erreur de mise à jour : {e}")
 
 # --- TABLEAU DE BORD ---
 st.subheader("Tableau de bord des attributions")
