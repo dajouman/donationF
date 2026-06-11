@@ -33,7 +33,7 @@ def update_google_sheet(parcelle_id, nouveau_statut):
     creds_dict = st.secrets["gcp_service_account"]
     creds = Credentials.from_service_account_info(creds_dict)
     client = gspread.authorize(creds)
-    sheet = client.open("NOM_DE_VOTRE_FICHIER_SHEET").sheet1
+    sheet = client.open("Donation_Lachaux").sheet1 # Assurez-vous que c'est le nom exact
     cell = sheet.find(str(parcelle_id))
     sheet.update_cell(cell.row, 4, nouveau_statut)
 
@@ -46,13 +46,21 @@ m = folium.Map(location=[gdf.geometry.centroid.y.mean(), gdf.geometry.centroid.x
 
 for _, row in gdf.iterrows():
     statut = row.get('IS')
-    # Gris clair si pas de données ou statut F, sinon couleurs
-    if pd.isna(statut) or statut == 'F':
-        couleur = '#f0f0f0'
-    else:
-        couleur = '#2ecc71' if statut == 'I' else '#3498db'
+    
+    if pd.isna(statut):
+        couleur = '#f0f0f0' # Gris très clair
+        nom_proprio = "Hors inventaire"
+    elif statut == 'F':
+        couleur = '#f1c40f' # Jaune
+        nom_proprio = "Reste à attribuer"
+    elif statut == 'I':
+        couleur = '#2ecc71' # Vert
+        nom_proprio = "Isabelle"
+    else: # S
+        couleur = '#e74c3c' # Rouge
+        nom_proprio = "Sébastien"
 
-    info_bulle = f"Parcelle: {row['id']}<br>Propriétaire: {row.get('Propriétaire', 'Aucun')}"
+    info_bulle = f"Parcelle: {row['id']}<br>Propriétaire: {nom_proprio}"
     
     folium.GeoJson(
         row['geometry'],
@@ -64,7 +72,7 @@ components.html(m._repr_html_(), width=800, height=500)
 
 # --- INTERFACE D'ATTRIBUTION ---
 st.subheader("Attribution d'une parcelle")
-ids_tries = sorted(gdf['id'].unique().astype(str))
+ids_tries = sorted(gdf['id'].unique().astype(str), key=lambda x: int(x) if x.isdigit() else x)
 selected_id = st.selectbox("Sélectionnez une parcelle :", ids_tries)
 new_is = st.radio("Attribuer à :", ['I', 'S', 'F'], format_func=lambda x: {'I': 'Isabelle', 'S': 'Sébastien', 'F': 'Reste à attribuer'}[x])
 
@@ -74,17 +82,18 @@ if st.button("Valider l'attribution"):
         st.success("Enregistré dans le Google Sheet !")
         st.rerun()
     except Exception as e:
-        st.error(f"Erreur de mise à jour : {e}")
+        st.error(f"Erreur : {e}")
 
 # --- TABLEAU DE BORD ---
 st.subheader("Tableau de bord des attributions")
-gdf['IS'] = gdf['IS'].fillna('F')
-gdf['Propriétaire'] = gdf['IS'].map({'I': 'Isabelle', 'S': 'Sébastien', 'F': 'Reste à attribuer'})
+df_display = gdf.copy()
+df_display['IS'] = df_display['IS'].fillna('F')
+df_display['Propriétaire'] = df_display['IS'].map({'I': 'Isabelle', 'S': 'Sébastien', 'F': 'Reste à attribuer'})
 
 for col in ['contenance', 'Revenu_Cadastral']:
-    gdf[col] = pd.to_numeric(gdf[col].astype(str).str.replace(',', '.'), errors='coerce').fillna(0)
+    df_display[col] = pd.to_numeric(df_display[col].astype(str).str.replace(',', '.'), errors='coerce').fillna(0)
 
-summary = gdf.groupby(['Propriétaire', 'Nature'], as_index=False).agg({'id_merge': 'count', 'contenance': 'sum', 'Revenu_Cadastral': 'sum'})
+summary = df_display.groupby(['Propriétaire', 'Nature'], as_index=False).agg({'id_merge': 'count', 'contenance': 'sum', 'Revenu_Cadastral': 'sum'})
 totals = summary.groupby('Propriétaire')[['id_merge', 'contenance', 'Revenu_Cadastral']].sum().reset_index()
 totals['Nature'] = 'TOTAL'
 summary = pd.concat([summary, totals])
