@@ -12,7 +12,8 @@ st.title("Gestion de la Donation Lachaux")
 @st.cache_data(ttl=30)
 def load_data():
     # 1. Chargement des données depuis votre Sheet publié
-    url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRrcHwy2y4vE2boubFxFCH-3RZpIyr0DvEm0ScJBHsr6UG4EMTvAJz7oqdlRVuIpouLhoxG7l5kCjRF/pub?output=csv"
+    # REMPLACEZ L'URL CI-DESSOUS PAR VOTRE LIEN DE PUBLICATION CSV
+    url = "VOTRE_URL_ICI"
     df = pd.read_csv(url)
     df['id_merge'] = df['id_merge'].astype(str)
     
@@ -26,7 +27,7 @@ def load_data():
     return gdf.merge(df, left_on='id', right_on='id_merge', how='left')
 
 # On charge les données
-gdf = gdf_full = load_data()
+gdf = load_data()
 
 # --- CARTE ---
 st.subheader("Visualisation des parcelles")
@@ -57,9 +58,16 @@ gdf['IS'] = gdf['IS'].fillna('F')
 libelles = {'I': 'Isabelle', 'S': 'Sébastien', 'F': 'Reste à attribuer'}
 gdf['Propriétaire'] = gdf['IS'].map(libelles)
 
+# Nettoyage des colonnes numériques
+for col in ['contenance', 'Revenu_Cadastral']:
+    # On remplace la virgule par un point et on force la conversion numérique
+    gdf[col] = pd.to_numeric(gdf[col].astype(str).str.replace(',', '.'), errors='coerce').fillna(0)
+
+# Groupby avec compte des parcelles et sommes
 summary = gdf.groupby(['Propriétaire', 'Nature']).agg({
+    'id_merge': 'count',
     'contenance': 'sum',
     'Revenu_Cadastral': 'sum'
-}).reset_index()
+}).rename(columns={'id_merge': 'Nombre de parcelles'}).reset_index()
 
 st.table(summary)
