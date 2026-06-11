@@ -11,7 +11,7 @@ from google.oauth2.service_account import Credentials
 
 # Configuration
 st.set_page_config(layout="wide")
-st.title("Gestion de la Donation Lachaux")
+st.title("Gestion de la Donation Isa / Seb")
 
 # --- FONCTIONS ---
 @st.cache_data(ttl=30)
@@ -72,7 +72,6 @@ components.html(m._repr_html_(), width=800, height=500)
 
 # --- INTERFACE D'ATTRIBUTION ---
 st.subheader("Attribution d'une parcelle")
-# On ne garde que les parcelles présentes dans le CSV
 df_inventaire = gdf[gdf['id_merge'].notna()]
 ids_tries = sorted(df_inventaire['id'].unique().astype(str), key=lambda x: int(x) if x.isdigit() else x)
 
@@ -88,7 +87,7 @@ if st.button("Valider l'attribution"):
         st.error(f"Erreur : {e}")
 
 # --- TABLEAU DE BORD ---
-st.subheader("Tableau de bord des attributions")
+st.subheader("Tableau de bord des attributions - Donation Isa / Seb")
 df_display = gdf.copy()
 df_display['IS'] = df_display['IS'].fillna('F')
 df_display['Propriétaire'] = df_display['IS'].map({'I': 'Isabelle', 'S': 'Sébastien', 'F': 'Reste à attribuer'})
@@ -102,4 +101,14 @@ totals['Nature'] = 'TOTAL'
 summary = pd.concat([summary, totals])
 summary['sort_order'] = summary['Nature'].apply(lambda x: 1 if x == 'TOTAL' else 0)
 summary = summary.sort_values(['Propriétaire', 'sort_order', 'Nature']).drop(columns=['sort_order'])
-st.table(summary.rename(columns={'id_merge': 'Nombre de parcelles'}))
+
+def highlight_total(row):
+    color = 'background-color: #e6e6fa' if row['Nature'] == 'TOTAL' else ''
+    return [color] * len(row)
+
+st.dataframe(
+    summary.rename(columns={'id_merge': 'Nombre de parcelles'})
+    .style.apply(highlight_total, axis=1),
+    hide_index=True,
+    use_container_width=True
+)
