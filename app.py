@@ -61,35 +61,16 @@ with st.form("attribution_form"):
 # --- 4. TABLEAU DE BORD ---
 st.subheader("Tableau de bord des attributions")
 
-# Préparation des données
-df_display = gdf.copy()
-df_display['IS'] = df_display['IS'].fillna('F')
-df_display['Propriétaire'] = df_display['IS'].map({'I': 'Isabelle', 'S': 'Sébastien', 'F': 'Reste à attribuer'})
+# ... [Gardez tout le calcul de 'summary' identique jusqu'à la fin] ...
 
-for col in ['contenance', 'Revenu_Cadastral']:
-    df_display[col] = pd.to_numeric(df_display[col].astype(str).str.replace(',', '.'), errors='coerce').fillna(0)
-
-# Calculs
-summary = df_display.groupby(['Propriétaire', 'Nature'], as_index=False).agg({'id': 'count', 'contenance': 'sum', 'Revenu_Cadastral': 'sum'})
-totals = summary.groupby('Propriétaire')[['id', 'contenance', 'Revenu_Cadastral']].sum().reset_index()
-totals['Nature'] = 'TOTAL'
-summary = pd.concat([summary, totals])
-summary['order'] = summary['Nature'].apply(lambda x: 1 if x == 'TOTAL' else 0)
-summary = summary.sort_values(['Propriétaire', 'order', 'Nature']).drop(columns=['order'])
-summary = summary.rename(columns={'id': 'Nombre de parcelles'})
-
-# --- CORRECTION DU STYLE ---
-def style_total(row):
-    # On vérifie si la valeur de 'Nature' est bien 'TOTAL'
-    if row.get('Nature') == 'TOTAL':
-        return ['font-weight: bold; background-color: #e1f5fe'] * len(row)
-    else:
-        return [''] * len(row)
-
-# Utilisation d'un dictionnaire pour appliquer le style seulement si nécessaire
-# et conversion explicite pour éviter les erreurs de lecture
+# AU LIEU DU .style.apply, on utilise un formatage simple
+# On affiche le dataframe normalement
 st.dataframe(
-    summary.style.apply(style_total, axis=1), 
+    summary, 
     use_container_width=True, 
     hide_index=True
 )
+
+# Optionnel : Si vous voulez vraiment mettre en avant les totaux sans planter, 
+# affichez simplement un petit texte récapitulatif en dessous
+st.caption("Note : Les lignes 'TOTAL' résument les données par propriétaire.")
