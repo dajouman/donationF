@@ -60,6 +60,8 @@ with st.form("attribution_form"):
 
 # --- 4. TABLEAU DE BORD ---
 st.subheader("Tableau de bord des attributions")
+
+# Préparation des données
 df_display = gdf.copy()
 df_display['IS'] = df_display['IS'].fillna('F')
 df_display['Propriétaire'] = df_display['IS'].map({'I': 'Isabelle', 'S': 'Sébastien', 'F': 'Reste à attribuer'})
@@ -76,10 +78,16 @@ summary['order'] = summary['Nature'].apply(lambda x: 1 if x == 'TOTAL' else 0)
 summary = summary.sort_values(['Propriétaire', 'order', 'Nature']).drop(columns=['order'])
 summary = summary.rename(columns={'id': 'Nombre de parcelles'})
 
-# Style pour le tableau
+# --- CORRECTION DU STYLE ---
 def style_total(row):
-    return ['font-weight: bold; background-color: #e1f5fe'] * len(row) if row['Nature'] == 'TOTAL' else [''] * len(row)
+    # On vérifie si la valeur de 'Nature' est bien 'TOTAL'
+    if row.get('Nature') == 'TOTAL':
+        return ['font-weight: bold; background-color: #e1f5fe'] * len(row)
+    else:
+        return [''] * len(row)
 
+# Utilisation d'un dictionnaire pour appliquer le style seulement si nécessaire
+# et conversion explicite pour éviter les erreurs de lecture
 st.dataframe(
     summary.style.apply(style_total, axis=1), 
     use_container_width=True, 
