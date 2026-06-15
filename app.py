@@ -29,41 +29,43 @@ def load_data():
 
 gdf = load_data()
 
-# --- 1. CARTE (En haut) ---
+# --- 1. CARTE ---
 st.subheader("Localisation des parcelles")
 m = folium.Map(location=[gdf.geometry.centroid.y.mean(), gdf.geometry.centroid.x.mean()], zoom_start=14)
-
 for _, row in gdf.iterrows():
     color = 'blue' if row['IS'] == 'I' else ('red' if row['IS'] == 'S' else 'gray')
     folium.GeoJson(
         row.geometry,
         style_function=lambda x, color=color: {'fillColor': color, 'color': color, 'weight': 1, 'fillOpacity': 0.6},
-        tooltip=f"ID: {row['id']} - Nature: {row['Nature']}"
+        tooltip=f"ID: {row['id']} - Nature: {row['Nature']} - Contenance: {row.get('contenance', 'N/A')}"
     ).add_to(m)
 st_folium(m, width=1200, height=400)
 
-# --- 2. FORMULAIRE D'AFFECTATION ---
+# --- 2. FORMULAIRE ---
 st.subheader("Modifier une affectation")
 with st.form("attribution_form"):
     col1, col2 = st.columns(2)
-    parcel_id = col1.selectbox("Choisir l'ID de la parcelle", gdf['id'].unique())
+    # Tri de la liste des IDs pour le menu
+    sorted_ids = sorted(gdf['id'].unique(), key=lambda x: (len(x), x))
+    parcel_id = col1.selectbox("Choisir l'ID de la parcelle", sorted_ids)
     new_owner = col2.selectbox("Nouvelle attribution", ["I", "S", "F"])
     submit = st.form_submit_button("Appliquer la modification")
 
-if submit:
-    st.warning("Note: Cette modification met à jour le DataFrame local. Pour rendre cela permanent, il faudra connecter l'écriture vers Google Sheets (via gspread).")
-    # Logique de mise à jour locale ici...
-
-# --- 3. TABLEAU DE BORD (En bas) ---
+# --- 3. TABLEAU DE BORD AVEC TOTAUX ---
 st.subheader("Tableau de bord des attributions")
 df_display = gdf.copy()
 df_display['IS'] = df_display['IS'].fillna('F')
 df_display['Propriétaire'] = df_display['IS'].map({'I': 'Isabelle', 'S': 'Sébastien', 'F': 'Reste à attribuer'})
 
-# Calculs
 for col in ['contenance', 'Revenu_Cadastral']:
     df_display[col] = pd.to_numeric(df_display[col].astype(str).str.replace(',', '.'), errors='coerce').fillna(0)
 
+# Création résumé + Totaux
 summary = df_display.groupby(['Propriétaire', 'Nature'], as_index=False).agg({'id': 'count', 'contenance': 'sum', 'Revenu_Cadastral': 'sum'})
+totals = summary.groupby('Propriétaire')[['id', 'contenance', 'Revenu_Cadastral']].sum().reset_index()
+totals['Nature'] = 'TOTAL'
+summary = pd.concat([summary, totals])
+summary = summary.sort_values(['Propriétaire', 'Nature'])
 summary = summary.rename(columns={'id': 'Nombre de parcelles'})
+
 st.table(summary)
