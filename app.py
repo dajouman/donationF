@@ -9,7 +9,7 @@ from streamlit_folium import st_folium
 st.set_page_config(layout="wide", page_title="Donation Famille")
 
 # --- 1. CHARGEMENT ET FUSION ---
-@st.cache_data(ttl=10) # Cache de 10 secondes pour voir vos modifs sur le Sheet presque instantanément
+@st.cache_data(ttl=10) # Cache de 10 secondes pour actualisation rapide
 def load_data():
     url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRrcHwy2y4vE2boubFxFCH-3RZpIyr0DvEm0ScJBHsr6UG4EMTvAJz7oqdlRVuIpouLhoxG7l5kCjRF/pub?output=csv"
     df = pd.read_csv(url)
@@ -18,7 +18,7 @@ def load_data():
     df.columns = df.columns.str.strip()
     df['id_merge'] = df['id_merge'].astype(str).str.strip()
     
-    # SÉCURITÉ : Nettoyage de la colonne IS (enlève les espaces et force les majuscules 'y' -> 'Y')
+    # SÉCURITÉ : Nettoyage de la colonne IS (enlève les espaces et force les majuscules)
     if 'IS' in df.columns:
         df['IS'] = df['IS'].astype(str).str.strip().str.upper()
     
@@ -41,7 +41,7 @@ def load_data():
     # Fusion inner : seules les parcelles listées dans votre Sheet sont conservées et affichées
     gdf_merged = gdf.merge(df, left_on='id', right_on='id_merge', how='inner')
     
-    # Remplissages par défaut (crucial pour vos lignes Y et G qui n'ont pas de Nature ou Parcelle)
+    # Remplissages par défaut (sécurité si jamais la colonne 'Parcelle' ou 'Nature' est vide pour certaines lignes)
     gdf_merged['Nature'] = gdf_merged['Nature'].fillna('Info uniquement')
     gdf_merged['Parcelle'] = gdf_merged['Parcelle'].fillna(gdf_merged['id'])
     
@@ -62,20 +62,20 @@ else:
 for _, row in gdf.iterrows():
     prop = row['IS']
     
-    # Configuration des profils (Nom de famille, Couleur de la parcelle)
+    # Configuration des profils (Nom de famille, Nouvelle palette de couleurs)
     config_prop = {
         'I': ('Isabelle', 'blue'),
         'S': ('Sébastien', 'red'),
-        'Y': ('Sylvain', '#98df8a'),  # Vert pastel discret
-        'G': ('Gilles', '#ffbb78')   # Orange pastel discret
+        'Y': ('Sylvain', '#9370db'),  # Mauve / Violet clair bien visible
+        'G': ('Gilles', '#ff7f0e')    # Orange plus soutenu et distinct
     }
     
     nom_prop, color = config_prop.get(prop, ('Non attribué', 'gray'))
     
     # Ajustement dynamique du Pop-up / Tooltip selon le propriétaire
     if prop in ['Y', 'G']:
-        # Version ultra-légère pour Sylvain et Gilles (uniquement Nom et ID)
-        popup_text = f"<b>Propriétaire :</b> {nom_prop}<br><b>ID :</b> {row['id']}"
+        # Version personnalisée et épurée pour Sylvain et Gilles (Nom de Parcelle et Propriétaire)
+        popup_text = f"<b>Parcelle :</b> {row['Parcelle']}<br><b>Propriétaire :</b> {nom_prop}"
     else:
         # Version complète pour Isabelle et Sébastien
         popup_text = f"<b>Parcelle :</b> {row['Parcelle']}<br>" \
