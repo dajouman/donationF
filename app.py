@@ -17,7 +17,7 @@ def load_data():
     response = requests.get(url)
     df = pd.read_csv(StringIO(response.text))
     
-    # Nettoyage des identifiants (espaces, types)
+    # Nettoyage des identifiants
     df['id_merge'] = df['id_merge'].astype(str).str.strip()
     
     with open('commune.json', 'r', encoding='utf-8') as f:
@@ -47,7 +47,7 @@ for _, row in gdf.iterrows():
     nom_prop = 'Isabelle' if prop == 'I' else ('Sébastien' if prop == 'S' else 'Non attribué')
     color = 'blue' if prop == 'I' else ('red' if prop == 'S' else 'gray')
     
-    # Pop-up enrichi avec la nouvelle variable 'parcelle' et contenance formatée
+    # Pop-up enrichi
     popup_text = f"<b>Parcelle :</b> {row.get('parcelle', row['id'])}<br>" \
                  f"<b>Contenance :</b> {row['contenance']:.4f} a<br>" \
                  f"<b>Valeur :</b> {row.get('Revenu_Cadastral', 0):.2f}<br>" \
@@ -76,63 +76,6 @@ st.subheader("Tableau de bord des attributions")
 df_display = gdf.copy()
 df_display['IS'] = df_display['IS'].fillna('F')
 df_display['Propriétaire'] = df_display['IS'].map({'I': 'Isabelle', 'S': 'Sébastien', 'F': 'Reste à attribuer'})
-
-summary = df_display.groupby(['Propriétaire', 'Nature'], as_index=False).agg({
-    'id': 'count', 'contenance': 'sum', 'Revenu_Cadastral': 'sum'
-})
-
-totals = summary.groupby('Propriétaire')[['id', 'contenance', 'Revenu_Cadastral']].sum().reset_index()
-totals['Nature'] = '--- TOTAL ---'
-summary = pd.concat([summary, totals], ignore_index=True)
-
-summary['sort'] = summary['Nature'].apply(lambda x: 1 if x == '--- TOTAL ---' else 0)
-summary = summary.sort_values(['Propriétaire', 'sort', 'Nature']).drop(columns=['sort'])
-
-st.dataframe(summary.rename(columns={'id': 'Nb Parcelles'}), use_container_width=True, hide_index=True)gdf = load_data()
-
-# --- 2. CARTE INTERACTIVE ---
-st.subheader("Localisation des parcelles")
-bounds = gdf.total_bounds
-m = folium.Map()
-m.fit_bounds([[bounds[1], bounds[0]], [bounds[3], bounds[2]]])
-
-for _, row in gdf.iterrows():
-    prop = row.get('IS', 'F')
-    nom_prop = 'Isabelle' if prop == 'I' else ('Sébastien' if prop == 'S' else 'Non attribué')
-    color = 'blue' if prop == 'I' else ('red' if prop == 'S' else 'gray')
-    
-    # Pop-up enrichi
-    popup_text = f"<b>Parcelle :</b> {row['id']}<br>" \
-                 f"<b>Contenance :</b> {row.get('contenance', 'N/A')}<br>" \
-                 f"<b>Valeur :</b> {row.get('Revenu_Cadastral', 'N/A')}<br>" \
-                 f"<b>Propriétaire :</b> {nom_prop}"
-    
-    folium.GeoJson(
-        row.geometry,
-        style_function=lambda x, col=color: {'fillColor': col, 'color': col, 'weight': 1, 'fillOpacity': 0.6},
-        tooltip=folium.Tooltip(popup_text)
-    ).add_to(m)
-
-st_folium(m, width=1200, height=400)
-
-# --- 3. FORMULAIRE D'AFFECTATION ---
-st.subheader("Modifier une affectation")
-with st.form("attribution_form"):
-    col1, col2 = st.columns(2)
-    sorted_ids = sorted(gdf['id'].unique().tolist(), key=lambda x: (len(x), x))
-    parcel_id = col1.selectbox("Choisir l'ID de la parcelle", sorted_ids)
-    new_owner = col2.selectbox("Nouvelle attribution", ["I", "S", "F"])
-    submit = st.form_submit_button("Appliquer la modification")
-
-# --- 4. TABLEAU DE BORD ---
-st.subheader("Tableau de bord des attributions")
-
-df_display = gdf.copy()
-df_display['IS'] = df_display['IS'].fillna('F')
-df_display['Propriétaire'] = df_display['IS'].map({'I': 'Isabelle', 'S': 'Sébastien', 'F': 'Reste à attribuer'})
-
-for col in ['contenance', 'Revenu_Cadastral']:
-    df_display[col] = pd.to_numeric(df_display[col].astype(str).str.replace(',', '.'), errors='coerce').fillna(0)
 
 summary = df_display.groupby(['Propriétaire', 'Nature'], as_index=False).agg({
     'id': 'count', 'contenance': 'sum', 'Revenu_Cadastral': 'sum'
