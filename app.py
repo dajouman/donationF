@@ -5,10 +5,11 @@ import json
 import folium
 from streamlit_folium import st_folium
 
-st.set_page_config(layout="wide", page_title="Donation Isa / Seb")
+# Configuration de la page de l'application
+st.set_page_config(layout="wide", page_title="Donation Famille")
 
 # --- 1. CHARGEMENT ET FUSION ---
-@st.cache_data(ttl=10) # Cache court pour appliquer vos modifications du Sheet instantanément
+@st.cache_data(ttl=10) # Cache de 10 secondes pour voir vos modifs sur le Sheet presque instantanément
 def load_data():
     url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRrcHwy2y4vE2boubFxFCH-3RZpIyr0DvEm0ScJBHsr6UG4EMTvAJz7oqdlRVuIpouLhoxG7l5kCjRF/pub?output=csv"
     df = pd.read_csv(url)
@@ -17,7 +18,7 @@ def load_data():
     df.columns = df.columns.str.strip()
     df['id_merge'] = df['id_merge'].astype(str).str.strip()
     
-    # Nettoyage et conversion des chiffres (gestion des virgules comme "14,02")
+    # Nettoyage et conversion des chiffres (gestion des virgules françaises et cases vides)
     for col in ['contenance', 'Revenu_Cadastral']:
         if col in df.columns:
             df[col] = df[col].astype(str).str.replace('"', '', regex=False).str.replace(',', '.', regex=False).str.strip()
@@ -30,15 +31,16 @@ def load_data():
     gdf = gpd.GeoDataFrame.from_features(data['features'])
     gdf['id'] = gdf['id'].astype(str).str.strip()
     
-    # On isole uniquement la géométrie pour éviter tout conflit de nom de colonne
+    # Sécurisation : on ne garde que la géométrie du JSON pour éviter tout doublon de colonne (ex: contenance)
     gdf = gdf[['id', 'geometry']]
     
-    # Fusion inner : seules vos parcelles du Sheet sont conservées
+    # Fusion inner : seules les parcelles listées dans votre Sheet sont conservées et affichées
     gdf_merged = gdf.merge(df, left_on='id', right_on='id_merge', how='inner')
     
-    # Remplissages par défaut
+    # Remplissages par défaut (crucial pour vos lignes Y et G qui n'ont pas de Nature ou Parcelle)
     gdf_merged['IS'] = gdf_merged['IS'].fillna('F')
-    gdf_merged['Nature'] = gdf_merged['Nature'].fillna('Inconnue')
+    gdf_merged['Nature'] = gdf_merged['Nature'].fillna('Info uniquement')
+    gdf_merged['Parcelle'] = gdf_merged['Parcelle'].fillna(gdf_merged['id'])
     
     return gdf_merged
 
@@ -56,37 +58,90 @@ else:
 
 for _, row in gdf.iterrows():
     prop = row['IS']
-    nom_prop = 'Isabelle' if prop == 'I' else ('Sébastien' if prop == 'S' else 'Non attribué')
-    color = 'blue' if prop == 'I' else ('red' if prop == 'S' else 'gray')
     
-    # Modification ici : affichage de la valeur brute en ares (a)
-    popup_text = f"<b>Parcelle :</b> {row['Parcelle']}<br>" \
-                 f"<b>Contenance :</b> {row['contenance']} a<br>" \
-                 f"<b>Valeur :</b> {row['Revenu_Cadastral']:.2f}<br>" \
-                 f"<b>Propriétaire :</b> {nom_prop}"
+    # Configuration des profils (Nom de famille, Couleur de la parcelle)
+    config_prop = {
+        'I': ('Isabelle', 'blue'),
+        'S': ('Sébastien', 'red'),
+        'Y': ('Sylvain', '#98df8a'),  # Vert pastel discret
+        'G': ('Gilles', '#ffbb78')   # Orange pastel discret
+    }
+    
+    nom_prop, color = config_prop.get(prop, ('Non attribué', 'gray'))
+    
+    # Ajustement dynamique du Pop-up / Tooltip selon le propriétaire
+    if prop in ['Y', 'G']:
+        # Version ultra-légère pour Sylvain et Gilles (uniquement Nom et ID)
+        popup_text = f"<b>Propriétaire :</b> {nom_prop}<br><b>ID :</b> {row['id']}"
+    else:
+        # Version complète pour Isabelle et Sébastien
+        popup_text = f"<b>Parcelle :</b> {row['Parcelle']}<br>" \
+                     f"<b>Contenance :</b> {row['contenance']} a<br>" \
+                     f"<b>Valeur :</b> {row['Revenu_Cadastral']:.2f}<br>" \
+                     f"<b>Propriétaire :</b> {nom_prop}"
     
     folium.GeoJson(
         row.geometry,
         style_function=lambda x, col=color: {'fillColor': col, 'color': col, 'weight': 1, 'fillOpacity': 0.6},
-        tooltip=folium.Tooltip(popup_text)
+        tooltip=folium.Tooltip(popup_text) # S'affiche directement au survol de la souris
     ).add_to(m)
 
 st_folium(m, width=1200, height=400)
 
-# --- 3. TABLEAU DE BORD ---
+# --- 3. TABLEAU DE BORD GLOBAL ---
 st.subheader("Tableau de bord des attributions")
 df_display = gdf.copy()
-df_display['Propriétaire'] = df_display['IS'].map({'I': 'Isabelle', 'S': 'Sébastien'}).fillna('Reste à attribuer')
 
+# Mapping des noms pour l'affichage textuel du tableau
+df_display['Propriétaire'] = df_display['IS'].map({
+    'I': 'Isabelle', 
+    'S': 'Sébastien',
+    'Y': 'Sylvain (Info)',
+    'G': 'Gilles (Info)'
+}).fillna('Reste à attribuer')
+
+# Groupement et agrégation des données
 summary = df_display.groupby(['Propriétaire', 'Nature'], as_index=False).agg({
     'id': 'count', 
     'contenance': 'sum', 
     'Revenu_Cadastral': 'sum'
 })
 
+# Calcul des lignes de sous-totaux par personne
 totals = summary.groupby('Propriétaire')[['id', 'contenance', 'Revenu_Cadastral']].sum().reset_index()
 totals['Nature'] = '--- TOTAL ---'
 summary = pd.concat([summary, totals], ignore_index=True)
 summary = summary.sort_values(['Propriétaire', 'Nature']).rename(columns={'id': 'Nb Parcelles'})
 
 st.dataframe(summary, use_container_width=True, hide_index=True)
+
+# --- 4. BALANCE DE LA DONATION (Filtre strict Cousins) ---
+st.subheader("Balance et Équilibrage des Cousins (Isabelle / Sébastien)")
+
+# On isole uniquement 'I' et 'S' pour ne pas fausser le calcul de la soulte avec vos parcelles infos
+rc_isabelle = gdf[gdf['IS'] == 'I']['Revenu_Cadastral'].sum()
+rc_sebastien = gdf[gdf['IS'] == 'S']['Revenu_Cadastral'].sum()
+rc_total = rc_isabelle + rc_sebastien
+cible = rc_total / 2
+valeur_soulte = abs(rc_isabelle - rc_sebastien) / 2
+
+col1, col2, col3 = st.columns(3)
+with col1:
+    st.metric(label="Total Revenu Isabelle", value=f"{rc_isabelle:.2f} €")
+with col2:
+    st.metric(label="Total Revenu Sébastien", value=f"{rc_sebastien:.2f} €")
+with col3:
+    st.metric(label="Cible d'équilibre (50/50)", value=f"{cible:.2f} €")
+
+if rc_isabelle > rc_sebastien:
+    st.warning(
+        f"📊 **Écart constaté :** Isabelle a un lot supérieur de {rc_isabelle - rc_sebastien:.2f} € par rapport à Sébastien.\n\n"
+        f"⚖️ **Pour équilibrer :** Isabelle doit une soulte théorique de **{valeur_soulte:.2f} €** à Sébastien."
+    )
+elif rc_sebastien > rc_isabelle:
+    st.warning(
+        f"📊 **Écart constaté :** Sébastien a un lot supérieur de {rc_sebastien - rc_isabelle:.2f} € par rapport à Isabelle.\n\n"
+        f"⚖️ **Pour équilibrer :** Sébastien doit une soulte théorique de **{valeur_soulte:.2f} €** à Isabelle."
+    )
+else:
+    st.success("🎉 **Équilibre parfait entre les cousins !**")
