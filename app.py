@@ -8,7 +8,7 @@ from streamlit_folium import st_folium
 st.set_page_config(layout="wide", page_title="Donation Isa / Seb")
 
 # --- 1. CHARGEMENT ET FUSION ---
-@st.cache_data(ttl=10) # Cache de 10 secondes pour forcer la mise à jour immédiate de vos modifs
+@st.cache_data(ttl=10) # Cache court pour appliquer vos modifications du Sheet instantanément
 def load_data():
     url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRrcHwy2y4vE2boubFxFCH-3RZpIyr0DvEm0ScJBHsr6UG4EMTvAJz7oqdlRVuIpouLhoxG7l5kCjRF/pub?output=csv"
     df = pd.read_csv(url)
@@ -17,7 +17,7 @@ def load_data():
     df.columns = df.columns.str.strip()
     df['id_merge'] = df['id_merge'].astype(str).str.strip()
     
-    # Nettoyage et conversion des chiffres (gestion des virgules françaises comme "14,02")
+    # Nettoyage et conversion des chiffres (gestion des virgules comme "14,02")
     for col in ['contenance', 'Revenu_Cadastral']:
         if col in df.columns:
             df[col] = df[col].astype(str).str.replace('"', '', regex=False).str.replace(',', '.', regex=False).str.strip()
@@ -30,14 +30,13 @@ def load_data():
     gdf = gpd.GeoDataFrame.from_features(data['features'])
     gdf['id'] = gdf['id'].astype(str).str.strip()
     
-    # --- LA CORRECTION DU PIÈGE ---
-    # On ne garde QUE l'id et la géométrie du GeoJSON pour tuer le conflit de la colonne 'contenance'
+    # On isole uniquement la géométrie pour éviter tout conflit de nom de colonne
     gdf = gdf[['id', 'geometry']]
     
-    # Fusion parfaite : les données propres du CSV s'associent aux formes géométriques
+    # Fusion inner : seules vos parcelles du Sheet sont conservées
     gdf_merged = gdf.merge(df, left_on='id', right_on='id_merge', how='inner')
     
-    # Remplissages par défaut pour éviter les cases vides
+    # Remplissages par défaut
     gdf_merged['IS'] = gdf_merged['IS'].fillna('F')
     gdf_merged['Nature'] = gdf_merged['Nature'].fillna('Inconnue')
     
@@ -60,8 +59,9 @@ for _, row in gdf.iterrows():
     nom_prop = 'Isabelle' if prop == 'I' else ('Sébastien' if prop == 'S' else 'Non attribué')
     color = 'blue' if prop == 'I' else ('red' if prop == 'S' else 'gray')
     
+    # Modification ici : affichage de la valeur brute en ares (a)
     popup_text = f"<b>Parcelle :</b> {row['Parcelle']}<br>" \
-                 f"<b>Contenance :</b> {row['contenance']:.4f} a<br>" \
+                 f"<b>Contenance :</b> {row['contenance']} a<br>" \
                  f"<b>Valeur :</b> {row['Revenu_Cadastral']:.2f}<br>" \
                  f"<b>Propriétaire :</b> {nom_prop}"
     
@@ -78,14 +78,12 @@ st.subheader("Tableau de bord des attributions")
 df_display = gdf.copy()
 df_display['Propriétaire'] = df_display['IS'].map({'I': 'Isabelle', 'S': 'Sébastien'}).fillna('Reste à attribuer')
 
-# Le groupement fonctionne désormais parfaitement car 'contenance' est unique et garantie numérique
 summary = df_display.groupby(['Propriétaire', 'Nature'], as_index=False).agg({
     'id': 'count', 
     'contenance': 'sum', 
     'Revenu_Cadastral': 'sum'
 })
 
-# Calcul des totaux par personne
 totals = summary.groupby('Propriétaire')[['id', 'contenance', 'Revenu_Cadastral']].sum().reset_index()
 totals['Nature'] = '--- TOTAL ---'
 summary = pd.concat([summary, totals], ignore_index=True)
