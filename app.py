@@ -18,6 +18,10 @@ def load_data():
     df.columns = df.columns.str.strip()
     df['id_merge'] = df['id_merge'].astype(str).str.strip()
     
+    # SÉCURITÉ : Nettoyage de la colonne IS (enlève les espaces et force les majuscules 'y' -> 'Y')
+    if 'IS' in df.columns:
+        df['IS'] = df['IS'].astype(str).str.strip().str.upper()
+    
     # Nettoyage et conversion des chiffres (gestion des virgules françaises et cases vides)
     for col in ['contenance', 'Revenu_Cadastral']:
         if col in df.columns:
@@ -31,14 +35,13 @@ def load_data():
     gdf = gpd.GeoDataFrame.from_features(data['features'])
     gdf['id'] = gdf['id'].astype(str).str.strip()
     
-    # Sécurisation : on ne garde que la géométrie du JSON pour éviter tout doublon de colonne (ex: contenance)
+    # Sécurisation : on ne garde que la géométrie du JSON pour éviter tout doublon de colonne
     gdf = gdf[['id', 'geometry']]
     
     # Fusion inner : seules les parcelles listées dans votre Sheet sont conservées et affichées
     gdf_merged = gdf.merge(df, left_on='id', right_on='id_merge', how='inner')
     
     # Remplissages par défaut (crucial pour vos lignes Y et G qui n'ont pas de Nature ou Parcelle)
-    gdf_merged['IS'] = gdf_merged['IS'].fillna('F')
     gdf_merged['Nature'] = gdf_merged['Nature'].fillna('Info uniquement')
     gdf_merged['Parcelle'] = gdf_merged['Parcelle'].fillna(gdf_merged['id'])
     
