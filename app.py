@@ -41,7 +41,7 @@ def load_data():
     # Fusion inner : seules les parcelles listées dans votre Sheet sont conservées et affichées
     gdf_merged = gdf.merge(df, left_on='id', right_on='id_merge', how='inner')
     
-    # Remplissages par défaut (sécurité si jamais la colonne 'Parcelle' ou 'Nature' est vide pour certaines lignes)
+    # Remplissages par défaut
     gdf_merged['Nature'] = gdf_merged['Nature'].fillna('Info uniquement')
     gdf_merged['Parcelle'] = gdf_merged['Parcelle'].fillna(gdf_merged['id'])
     
@@ -62,19 +62,19 @@ else:
 for _, row in gdf.iterrows():
     prop = row['IS']
     
-    # Configuration des profils (Nom de famille, Nouvelle palette de couleurs)
+    # Configuration des profils (Nom de famille, Couleur de la parcelle)
     config_prop = {
         'I': ('Isabelle', 'blue'),
         'S': ('Sébastien', 'red'),
-        'Y': ('Sylvain', '#9370db'),  # Mauve / Violet clair bien visible
-        'G': ('Gilles', '#ff7f0e')    # Orange plus soutenu et distinct
+        'Y': ('Sylvain', '#9370db'),  # Mauve
+        'G': ('Gilles', '#ff7f0e')    # Orange foncé
     }
     
     nom_prop, color = config_prop.get(prop, ('Non attribué', 'gray'))
     
     # Ajustement dynamique du Pop-up / Tooltip selon le propriétaire
     if prop in ['Y', 'G']:
-        # Version personnalisée et épurée pour Sylvain et Gilles (Nom de Parcelle et Propriétaire)
+        # Version pour Sylvain et Gilles (Nom de Parcelle et Propriétaire)
         popup_text = f"<b>Parcelle :</b> {row['Parcelle']}<br><b>Propriétaire :</b> {nom_prop}"
     else:
         # Version complète pour Isabelle et Sébastien
@@ -86,42 +86,44 @@ for _, row in gdf.iterrows():
     folium.GeoJson(
         row.geometry,
         style_function=lambda x, col=color: {'fillColor': col, 'color': col, 'weight': 1, 'fillOpacity': 0.6},
-        tooltip=folium.Tooltip(popup_text) # S'affiche directement au survol de la souris
+        tooltip=folium.Tooltip(popup_text)
     ).add_to(m)
 
 st_folium(m, width=1200, height=400)
 
-# --- 3. TABLEAU DE BORD GLOBAL ---
+# --- 3. TABLEAU DE BORD GLOBAL (Cousins uniquement) ---
 st.subheader("Tableau de bord des attributions")
-df_display = gdf.copy()
 
-# Mapping des noms pour l'affichage textuel du tableau
-df_display['Propriétaire'] = df_display['IS'].map({
-    'I': 'Isabelle', 
-    'S': 'Sébastien',
-    'Y': 'Sylvain (Info)',
-    'G': 'Gilles (Info)'
-}).fillna('Reste à attribuer')
+# FILTRE : On ne garde STRICTEMENT qu'Isabelle et Sébastien pour le tableau de bord
+df_display = gdf[gdf['IS'].isin(['I', 'S'])].copy()
 
-# Groupement et agrégation des données
-summary = df_display.groupby(['Propriétaire', 'Nature'], as_index=False).agg({
-    'id': 'count', 
-    'contenance': 'sum', 
-    'Revenu_Cadastral': 'sum'
-})
+if not df_display.empty:
+    # Mapping des noms pour l'affichage textuel du tableau
+    df_display['Propriétaire'] = df_display['IS'].map({
+        'I': 'Isabelle', 
+        'S': 'Sébastien'
+    }).fillna('Reste à attribuer')
 
-# Calcul des lignes de sous-totaux par personne
-totals = summary.groupby('Propriétaire')[['id', 'contenance', 'Revenu_Cadastral']].sum().reset_index()
-totals['Nature'] = '--- TOTAL ---'
-summary = pd.concat([summary, totals], ignore_index=True)
-summary = summary.sort_values(['Propriétaire', 'Nature']).rename(columns={'id': 'Nb Parcelles'})
+    # Groupement et agrégation des données
+    summary = df_display.groupby(['Propriétaire', 'Nature'], as_index=False).agg({
+        'id': 'count', 
+        'contenance': 'sum', 
+        'Revenu_Cadastral': 'sum'
+    })
 
-st.dataframe(summary, use_container_width=True, hide_index=True)
+    # Calcul des lignes de sous-totaux par personne
+    totals = summary.groupby('Propriétaire')[['id', 'contenance', 'Revenu_Cadastral']].sum().reset_index()
+    totals['Nature'] = '--- TOTAL ---'
+    summary = pd.concat([summary, totals], ignore_index=True)
+    summary = summary.sort_values(['Propriétaire', 'Nature']).rename(columns={'id': 'Nb Parcelles'})
+
+    st.dataframe(summary, use_container_width=True, hide_index=True)
+else:
+    st.info("Aucune parcelle attribuée à Isabelle ou Sébastien pour le moment.")
 
 # --- 4. BALANCE DE LA DONATION (Filtre strict Cousins) ---
 st.subheader("Balance et Équilibrage des Cousins (Isabelle / Sébastien)")
 
-# On isole uniquement 'I' et 'S' pour ne pas fausser le calcul de la soulte avec vos parcelles infos
 rc_isabelle = gdf[gdf['IS'] == 'I']['Revenu_Cadastral'].sum()
 rc_sebastien = gdf[gdf['IS'] == 'S']['Revenu_Cadastral'].sum()
 rc_total = rc_isabelle + rc_sebastien
